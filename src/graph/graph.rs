@@ -18,7 +18,7 @@ pub struct Graph {
     edges: HashSet<Edge>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Operation {
     AddVertex(Vertex),
     RemoveVertex(Vertex),
