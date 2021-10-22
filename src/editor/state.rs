@@ -25,12 +25,12 @@ pub struct EditorState {
 
 impl EditorState {
     pub fn new() -> EditorState {
-        return EditorState {
+        EditorState {
             mode: EditorMode::Command,
             document: Graph::new(),
             history_tree: Arena::new(),
             last_edit: None,
-        };
+        }
     }
 
     pub fn evaluate(&mut self, input: Input) {

@@ -46,10 +46,10 @@ impl Operation {
 
 impl Graph {
     pub fn new() -> Graph {
-        return Graph {
+        Graph {
             vertices: HashSet::new(),
             edges: HashSet::new(),
-        };
+        }
     }
 
     // TODO: change return type to Result<Diff, Error>
