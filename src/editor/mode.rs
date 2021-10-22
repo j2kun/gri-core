@@ -1,4 +1,4 @@
-use crate::graph::graph::Operation;
+use crate::graph::Operation;
 use crate::editor::state::Input;
 use crate::editor::keys::*;
 

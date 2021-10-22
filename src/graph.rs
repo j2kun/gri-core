@@ -44,6 +44,12 @@ impl Operation {
     }
 }
 
+impl Default for Graph {
+    fn default() -> Self {
+        Graph::new()
+    }
+}
+
 impl Graph {
     pub fn new() -> Graph {
         Graph {

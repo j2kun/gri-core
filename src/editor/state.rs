@@ -3,8 +3,8 @@ use indextree::NodeId;
 
 use crate::editor::mode::EditorMode;
 use crate::editor::mode::TransitionResult;
-use crate::graph::graph::Diff;
-use crate::graph::graph::Graph;
+use crate::graph::Diff;
+use crate::graph::Graph;
 
 #[derive(Debug)]
 pub struct EditorState {
@@ -21,6 +21,12 @@ pub struct EditorState {
     // The id of the node in the history tree corresponding
     // to the last edit of the document.
     last_edit: Option<NodeId>,
+}
+
+impl Default for EditorState {
+    fn default() -> Self {
+        EditorState::new()
+    }
 }
 
 impl EditorState {
@@ -43,11 +49,8 @@ impl EditorState {
                 self.mode = next_mode;
                 let diff = self.document.apply(op);
                 let new_node_id = self.history_tree.new_node(diff);
-                match self.last_edit {
-                    Some(node_id) => {
-                        node_id.append(new_node_id, &mut self.history_tree);
-                    }
-                    _ => {}
+                if let Some(node_id) = self.last_edit {
+                    node_id.append(new_node_id, &mut self.history_tree);
                 }
                 self.last_edit = Some(new_node_id);
             }
