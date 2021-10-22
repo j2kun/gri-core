@@ -1,7 +1,8 @@
 use crate::graph::graph::Operation;
+use crate::editor::state::Input;
 use crate::editor::keys::*;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum EditorMode {
     // Like vim, Command mode is the default mode with no pending operations.
     Command,
@@ -20,14 +21,7 @@ pub enum TransitionResult {
     Apply(Operation, EditorMode),
 }
 
-// Probably should go elsewhere once input is more complex.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Input {
-    Key(char),
-}
-
 use EditorMode::*;
-use Input::*;
 use TransitionResult::*;
 
 impl EditorMode {
@@ -37,11 +31,11 @@ impl EditorMode {
     pub fn transition(self, input: Input) -> TransitionResult {
         match self {
             Command => match input {
-                Key(I_LOWER) => ModeChange(Insert),
+                Input::Key(I_LOWER) => ModeChange(Insert),
                 _ => self.unknown_command(input),
             },
             Insert => match input {
-                Key(ESC) => ModeChange(Command),
+                Input::Key(ESC) => ModeChange(Command),
                 _ => self.unknown_command(input),
             },
         }
@@ -65,7 +59,7 @@ mod tests {
     #[test]
     fn transition_to_insert_mode() {
         let mode = Command;
-        let actual = mode.transition(Key(I_LOWER));
+        let actual = mode.transition(Input::Key(I_LOWER));
         let expected = ModeChange(Insert);
         assert_eq!(expected, actual);
     }
@@ -73,7 +67,7 @@ mod tests {
     #[test]
     fn transition_to_command_mode() {
         let mode = Insert;
-        let actual = mode.transition(Key(ESC));
+        let actual = mode.transition(Input::Key(ESC));
         let expected = ModeChange(Command);
         assert_eq!(expected, actual);
     }
@@ -81,7 +75,7 @@ mod tests {
     #[test]
     fn transition_command_err() {
         let mode = Command;
-        let actual = mode.transition(Key('f'));
+        let actual = mode.transition(Input::Key('f'));
         let expected = Error(
             "Input Key('f') doesn't do anything in the current mode: Command".to_string(),
             Command,
