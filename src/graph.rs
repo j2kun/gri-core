@@ -1,25 +1,26 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Vertex {
-    id: i64,
+    pub id: i64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Edge {
-    id: i64,
-    source: Vertex,
-    target: Vertex,
-}
-
-#[derive(Debug)]
-pub struct Graph {
-    vertices: HashSet<Vertex>,
-    edges: HashSet<Edge>,
+    pub id: i64,
+    pub source: i64,
+    pub target: i64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Operation {
+pub struct Graph {
+    vertices: HashMap<i64, Vertex>,
+    edges: HashMap<i64, Edge>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum GraphOperation {
     AddVertex(Vertex),
     RemoveVertex(Vertex),
     AddEdge(Edge),
@@ -28,13 +29,13 @@ pub enum Operation {
 
 #[derive(Debug)]
 pub struct Diff {
-    operations: Vec<Operation>,
+    operations: Vec<GraphOperation>,
 }
 
-use Operation::*;
+use GraphOperation::*;
 
-impl Operation {
-    pub fn invert(self) -> Operation {
+impl GraphOperation {
+    pub fn invert(self) -> GraphOperation {
         match self {
             AddVertex(v) => RemoveVertex(v),
             RemoveVertex(v) => AddVertex(v),
@@ -53,14 +54,14 @@ impl Default for Graph {
 impl Graph {
     pub fn new() -> Graph {
         Graph {
-            vertices: HashSet::new(),
-            edges: HashSet::new(),
+            vertices: HashMap::new(),
+            edges: HashMap::new(),
         }
     }
 
     // TODO: change return type to Result<Diff, Error>
     // and define new Error class that can be used to report errors to user
-    pub fn apply(&mut self, operation: Operation) -> Diff {
+    pub fn apply(&mut self, operation: GraphOperation) -> Diff {
         match operation {
             AddVertex(v) => self.add_vertex(v),
             RemoveVertex(v) => self.remove_vertex(v),
@@ -69,11 +70,22 @@ impl Graph {
         }
     }
 
+    pub fn resolve_vertex(&self, vertex: &str) -> Option<i64> {
+        vertex
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .filter(|x| self.vertices.contains_key(&x))
+    }
+
     pub fn add_vertex(&mut self, v: Vertex) -> Diff {
         let mut ops = Vec::new();
-        let result = self.vertices.insert(v);
-        if result {
+        let result = self.vertices.insert(v.id, v);
+
+        if result.is_none() {
             ops.push(AddVertex(v));
+        } else {
+            // TODO: add a "modify vertex"?
         }
 
         Diff { operations: ops }
@@ -81,8 +93,8 @@ impl Graph {
 
     pub fn remove_vertex(&mut self, v: Vertex) -> Diff {
         let mut ops = Vec::new();
-        let result = self.vertices.remove(&v);
-        if result {
+        let result = self.vertices.remove(&v.id);
+        if result.is_some() {
             ops.push(RemoveVertex(v));
 
             // Each edge referring to this vertex is now
@@ -90,14 +102,14 @@ impl Graph {
             // TODO: make more efficient with an index
             // from vertex to incident edges.
             let mut edges_to_remove: HashSet<Edge> = HashSet::new();
-            for edge in self.edges.iter() {
-                if edge.source == v || edge.target == v {
+            for edge in self.edges.values() {
+                if edge.source == v.id || edge.target == v.id {
                     edges_to_remove.insert(*edge);
                 }
             }
 
             for edge in edges_to_remove.iter() {
-                self.edges.remove(edge);
+                self.edges.remove(&edge.id);
                 ops.push(RemoveEdge(*edge));
             }
         }
@@ -106,17 +118,19 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, e: Edge) -> Diff {
-        if !self.vertices.contains(&e.source) {
+        if !self.vertices.contains_key(&e.source) {
             panic!("Unknown vertex {:?}", e.source);
         }
-        if !self.vertices.contains(&e.target) {
+        if !self.vertices.contains_key(&e.target) {
             panic!("Unknown vertex {:?}", e.target);
         }
 
         let mut ops = Vec::new();
-        let result = self.edges.insert(e);
-        if result {
+        let result = self.edges.insert(e.id, e);
+        if result.is_none() {
             ops.push(AddEdge(e));
+        } else {
+            // TODO: add an edge edit operation?
         }
 
         Diff { operations: ops }
@@ -124,8 +138,8 @@ impl Graph {
 
     pub fn remove_edge(&mut self, e: Edge) -> Diff {
         let mut ops = Vec::new();
-        let result = self.edges.remove(&e);
-        if result {
+        let result = self.edges.remove(&e.id);
+        if result.is_some() {
             ops.push(RemoveEdge(e));
         }
 
@@ -153,13 +167,13 @@ mod tests {
 
         let e1 = Edge {
             id: 1,
-            source: v1,
-            target: v2,
+            source: v1.id,
+            target: v2.id,
         };
         let e2 = Edge {
             id: 2,
-            source: v2,
-            target: v3,
+            source: v2.id,
+            target: v3.id,
         };
 
         g.add_vertex(v1);
@@ -168,8 +182,8 @@ mod tests {
         g.add_edge(e1);
         g.add_edge(e2);
 
-        assert_eq!(g.vertices, vec![v1, v2, v3].into_iter().collect());
-        assert_eq!(g.edges, vec![e1, e2].into_iter().collect());
+        assert_eq!(HashMap::from([(1, v1), (2, v2), (3, v3)]), g.vertices);
+        assert_eq!(HashMap::from([(1, e1), (2, e2)]), g.edges);
     }
 
     #[test]
@@ -185,13 +199,13 @@ mod tests {
         history.extend(g.add_vertex(v3).operations);
         let e1 = Edge {
             id: 1,
-            source: v1,
-            target: v2,
+            source: v1.id,
+            target: v2.id,
         };
         let e2 = Edge {
             id: 2,
-            source: v2,
-            target: v3,
+            source: v2.id,
+            target: v3.id,
         };
 
         history.extend(g.add_edge(e1).operations);
@@ -201,8 +215,8 @@ mod tests {
             g.apply(op.invert());
         }
 
-        assert_eq!(g.vertices, HashSet::new());
-        assert_eq!(g.edges, HashSet::new());
+        assert_eq!(g.vertices, HashMap::new());
+        assert_eq!(g.edges, HashMap::new());
     }
 
     #[test]
@@ -213,13 +227,13 @@ mod tests {
         let v3 = Vertex { id: 3 };
         let e1 = Edge {
             id: 1,
-            source: v1,
-            target: v2,
+            source: v1.id,
+            target: v2.id,
         };
         let e2 = Edge {
             id: 2,
-            source: v1,
-            target: v3,
+            source: v1.id,
+            target: v3.id,
         };
 
         g.add_vertex(v1);
@@ -228,12 +242,12 @@ mod tests {
         g.add_edge(e1);
         g.add_edge(e2);
 
-        assert_eq!(g.vertices, vec![v1, v2, v3].into_iter().collect());
-        assert_eq!(g.edges, vec![e1, e2].into_iter().collect());
+        assert_eq!(HashMap::from([(1, v1), (2, v2), (3, v3)]), g.vertices);
+        assert_eq!(HashMap::from([(1, e1), (2, e2)]), g.edges);
 
         g.remove_vertex(v1);
 
-        assert_eq!(g.vertices, vec![v2, v3].into_iter().collect());
-        assert_eq!(g.edges, HashSet::new());
+        assert_eq!(HashMap::from([(2, v2), (3, v3)]), g.vertices);
+        assert_eq!(HashMap::new(), g.edges);
     }
 }

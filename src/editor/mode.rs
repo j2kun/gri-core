@@ -1,27 +1,43 @@
-use crate::graph::Operation;
-use crate::editor::state::Input;
 use crate::editor::keys::*;
+use crate::editor::state::Input;
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum EditorMode {
     // Like vim, Command mode is the default mode with no pending operations.
     Command,
     // Insert mode commands modify the graph object-at-a-time, like insert mode in vim allows you
     // to modify character-at-a-time.
     Insert,
+    // After the user declares they want to create an edge, the state machine requires extra
+    // information regarding which vertices to connect.
+    InsertEdgePending(String),
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum TransitionResult {
-    ModeChange(EditorMode),
-    Error(String, EditorMode),
+/**
+ * A ModalOperation represents an abstract operation, comprehensible to an end user, that is the
+ * result of a particular sequence of commands. The state machine that handles user input "emits"
+ * ModalOperations that are then interpreted by the Editor to determine how to update the editor
+ * state.
+ */
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum ModalOperation {
+    CreateNewVertex,
+    CreateNewEdge(String),
+}
 
-    // For now this is operation because the only thing I can do is add/remove vertices and edges.
-    // Later this will move somewhere else and include any sort of modification to the document.
-    Apply(Operation, EditorMode),
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum TransitionResult {
+    // An action emitted, with a new (but possibly unchanged) mode to enter.
+    Apply(ModalOperation, EditorMode),
+    // A simple mode change that results in no action for the editor to take.
+    ModeChange(EditorMode),
+    // An error (e.g., an unsupported operation) to report to the user, and a mode to enter as a
+    // consequence.
+    Error(String, EditorMode),
 }
 
 use EditorMode::*;
+use ModalOperation::*;
 use TransitionResult::*;
 
 impl EditorMode {
@@ -36,7 +52,14 @@ impl EditorMode {
             },
             Insert => match input {
                 Input::Key(ESC) => ModeChange(Command),
+                Input::Key(V_LOWER) => Apply(CreateNewVertex, Insert),
+                Input::Key(E_LOWER) => ModeChange(InsertEdgePending("".to_string())),
                 _ => self.unknown_command(input),
+            },
+            InsertEdgePending(s) => match input {
+                Input::Key(ESC) => ModeChange(Insert),
+                Input::Key(ENTER) => Apply(CreateNewEdge(s), Insert),
+                Input::Key(next_key) => ModeChange(InsertEdgePending(s + &next_key.to_string())),
             },
         }
     }
@@ -69,6 +92,14 @@ mod tests {
         let mode = Insert;
         let actual = mode.transition(Input::Key(ESC));
         let expected = ModeChange(Command);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn emit_operation_new_vertex() {
+        let mode = Insert;
+        let actual = mode.transition(Input::Key(V_LOWER));
+        let expected = Apply(CreateNewVertex, Insert);
         assert_eq!(expected, actual);
     }
 

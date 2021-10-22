@@ -1,2 +1,9 @@
+pub const COMMA: char = ',';
+pub const DIGIT_0: char = '0';
+pub const DIGIT_1: char = '1';
+pub const DIGIT_2: char = '2';
+pub const ENTER: char = '\u{e007}';
 pub const ESC: char = '\u{001b}';
+pub const E_LOWER: char = 'e';
 pub const I_LOWER: char = 'i';
+pub const V_LOWER: char = 'v';
