@@ -13,10 +13,10 @@ pub struct Edge {
     pub target: i64,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Graph {
-    vertices: HashMap<i64, Vertex>,
-    edges: HashMap<i64, Edge>,
+    pub vertices: HashMap<i64, Vertex>,
+    pub edges: HashMap<i64, Edge>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -56,6 +56,15 @@ impl Graph {
         Graph {
             vertices: HashMap::new(),
             edges: HashMap::new(),
+        }
+    }
+
+    pub fn apply_all(&mut self, operations: Vec<GraphOperation>) -> Diff {
+        Diff {
+            operations: operations
+                .iter()
+                .flat_map(|operation| self.apply(*operation).operations)
+                .collect(),
         }
     }
 
