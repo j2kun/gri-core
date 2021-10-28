@@ -30,6 +30,35 @@ pub struct EditorState {
     next_edge_id: i64,
 }
 
+#[derive(Debug)]
+pub struct OpInterpretation {
+    document_changes: Diff,
+    new_history_node: bool,
+    set_last_edit: Option<NodeId>,
+}
+
+impl Default for OpInterpretation {
+    fn default() -> Self {
+        OpInterpretation {
+            document_changes: Diff {
+                operations: Vec::new(),
+            },
+            new_history_node: false,
+            set_last_edit: None,
+        }
+    }
+}
+
+impl OpInterpretation {
+    pub fn standard_op(ops: Vec<GraphOperation>) -> Self {
+        OpInterpretation {
+            document_changes: Diff { operations: ops },
+            new_history_node: true,
+            set_last_edit: None,
+        }
+    }
+}
+
 impl Default for EditorState {
     fn default() -> Self {
         EditorState::new()
@@ -56,13 +85,21 @@ impl EditorState {
             }
             TransitionResult::Apply(op, next_mode) => {
                 self.mode = next_mode;
-                if let Some(graph_op) = self.interpret_modal_operation(op) {
-                    let diff = self.document.apply(graph_op);
+                let interpreted_op = self.interpret_modal_operation(op);
+                let diff = self
+                    .document
+                    .apply_all(interpreted_op.document_changes.operations);
+
+                if interpreted_op.new_history_node {
                     let new_node_id = self.history_tree.new_node(diff);
                     if let Some(node_id) = self.last_edit {
                         node_id.append(new_node_id, &mut self.history_tree);
                     }
                     self.last_edit = Some(new_node_id);
+                }
+
+                if let Some(node_id) = interpreted_op.set_last_edit {
+                    self.last_edit = Some(node_id);
                 }
             }
             TransitionResult::Error(msg, next_mode) => {
@@ -72,38 +109,37 @@ impl EditorState {
         }
     }
 
-    fn interpret_modal_operation(&mut self, op: ModalOperation) -> Option<GraphOperation> {
+    fn interpret_modal_operation(&mut self, op: ModalOperation) -> OpInterpretation {
         match op {
             ModalOperation::CreateNewVertex => {
                 let v = Vertex {
                     id: self.next_vertex_id,
                 };
                 self.next_vertex_id += 1;
-                Some(GraphOperation::AddVertex(v))
+                OpInterpretation::standard_op(vec![GraphOperation::AddVertex(v)])
             }
             ModalOperation::CreateNewEdge(chosen_vertices) => {
-                let maybe_edge = chosen_vertices
-                    .rsplit_once(',')
-                    .map(|(source_id, target_id)| {
-                        let source = self
-                            .document
-                            .resolve_vertex(source_id)
-                            .expect(format!("Could not find source vertex {}", source_id).as_str());
-                        let target = self
-                            .document
-                            .resolve_vertex(target_id)
-                            .expect(format!("Could not find target vertex {}", target_id).as_str());
-                        Edge {
-                            id: self.next_edge_id,
-                            source: source,
-                            target: target,
-                        }
-                    });
+                let maybe_edge =
+                    chosen_vertices
+                        .rsplit_once(',')
+                        .map(|(source_id, target_id)| {
+                            let source = self.document.resolve_vertex(source_id).expect(
+                                format!("Could not find source vertex {}", source_id).as_str(),
+                            );
+                            let target = self.document.resolve_vertex(target_id).expect(
+                                format!("Could not find target vertex {}", target_id).as_str(),
+                            );
+                            Edge {
+                                id: self.next_edge_id,
+                                source: source,
+                                target: target,
+                            }
+                        });
 
                 match maybe_edge {
                     Some(e) => {
                         self.next_edge_id += 1;
-                        Some(GraphOperation::AddEdge(e))
+                        OpInterpretation::standard_op(vec![GraphOperation::AddEdge(e)])
                     }
                     // Replace this with an error message reported to the user.
                     None => panic!(
@@ -112,6 +148,39 @@ impl EditorState {
                     ),
                 }
             }
+            ModalOperation::Undo => match self.last_edit {
+                None => OpInterpretation::default(),
+                Some(last_edit_id) => {
+                    let last_edit = (*(self.history_tree.get(last_edit_id).unwrap())).clone();
+                    let diff = Diff {
+                        operations: last_edit
+                            .get()
+                            .operations
+                            .iter()
+                            .map(|op| op.invert())
+                            .collect(),
+                    };
+                    OpInterpretation {
+                        document_changes: diff,
+                        new_history_node: false,
+                        set_last_edit: last_edit.parent(),
+                    }
+                }
+            },
+            ModalOperation::Redo => match self.last_edit {
+                None => OpInterpretation::default(),
+                Some(last_edit_id) => match (*self.history_tree.get(last_edit_id).unwrap())
+                    .last_child()
+                {
+                    None => OpInterpretation::default(),
+                    Some(next_state_id) => OpInterpretation {
+                        document_changes: (*(*self.history_tree.get(next_state_id).unwrap()).get())
+                            .clone(),
+                        new_history_node: false,
+                        set_last_edit: Some(next_state_id),
+                    },
+                },
+            },
         }
     }
 }
@@ -129,6 +198,21 @@ mod tests {
     use crate::graph::Graph;
     use crate::graph::Vertex;
 
+    fn single_edge_graph() -> Graph {
+        let mut single_edge = Graph::new();
+        let v0 = Vertex { id: 0 };
+        let v1 = Vertex { id: 1 };
+        let e0 = Edge {
+            id: 0,
+            source: v0.id,
+            target: v1.id,
+        };
+        single_edge.add_vertex(v0);
+        single_edge.add_vertex(v1);
+        single_edge.add_edge(e0);
+        return single_edge.clone();
+    }
+
     #[test]
     fn insert_two_vertices_and_edge() {
         let mut state = EditorState::new();
@@ -141,19 +225,39 @@ mod tests {
         state.evaluate(Input::Key(DIGIT_1));
         state.evaluate(Input::Key(ENTER));
 
-        let mut g = Graph::new();
-        let v0 = Vertex { id: 0 };
-        let v1 = Vertex { id: 1 };
-        let e0 = Edge {
-            id: 0,
-            source: v0.id,
-            target: v1.id,
-        };
-        g.add_vertex(v0);
-        g.add_vertex(v1);
-        g.add_edge(e0);
-
         assert_eq!(EditorMode::Insert, state.mode);
-        assert_eq!(g, state.document);
+
+        let expected = single_edge_graph();
+        assert_eq!(expected, state.document);
+    }
+
+    #[test]
+    fn undo_redo() {
+        let mut state = EditorState::new();
+        state.evaluate(Input::Key(I_LOWER));
+        state.evaluate(Input::Key(V_LOWER));
+        state.evaluate(Input::Key(V_LOWER));
+        state.evaluate(Input::Key(E_LOWER));
+        state.evaluate(Input::Key(DIGIT_0));
+        state.evaluate(Input::Key(COMMA));
+        state.evaluate(Input::Key(DIGIT_1));
+        state.evaluate(Input::Key(ENTER));
+        state.evaluate(Input::Key(ESC));
+
+        let single_edge = single_edge_graph();
+        assert_eq!(EditorMode::Command, state.mode);
+        assert_eq!(single_edge, state.document);
+
+        let mut undid = single_edge_graph();
+        undid.remove_edge(*undid.edges.values().next().unwrap());
+        state.evaluate(Input::Key(U_LOWER));
+
+        assert_eq!(EditorMode::Command, state.mode);
+        assert_eq!(undid, state.document);
+
+        state.evaluate(Input::Key(U_UPPER));
+
+        assert_eq!(EditorMode::Command, state.mode);
+        assert_eq!(single_edge, state.document);
     }
 }

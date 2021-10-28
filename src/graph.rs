@@ -19,7 +19,7 @@ pub struct Graph {
     pub edges: HashMap<i64, Edge>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum GraphOperation {
     AddVertex(Vertex),
     RemoveVertex(Vertex),
@@ -27,10 +27,11 @@ pub enum GraphOperation {
     RemoveEdge(Edge),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Diff {
-    operations: Vec<GraphOperation>,
+    pub operations: Vec<GraphOperation>,
 }
+
 
 use GraphOperation::*;
 
