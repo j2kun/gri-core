@@ -6,4 +6,6 @@ pub const ENTER: char = '\u{e007}';
 pub const ESC: char = '\u{001b}';
 pub const E_LOWER: char = 'e';
 pub const I_LOWER: char = 'i';
+pub const U_LOWER: char = 'u';
+pub const U_UPPER: char = 'U';
 pub const V_LOWER: char = 'v';

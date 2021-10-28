@@ -23,6 +23,8 @@ pub enum EditorMode {
 pub enum ModalOperation {
     CreateNewVertex,
     CreateNewEdge(String),
+    Undo,
+    Redo,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -48,6 +50,8 @@ impl EditorMode {
         match self {
             Command => match input {
                 Input::Key(I_LOWER) => ModeChange(Insert),
+                Input::Key(U_LOWER) => Apply(Undo, Command),
+                Input::Key(U_UPPER) => Apply(Redo, Command),
                 _ => self.unknown_command(input),
             },
             Insert => match input {
